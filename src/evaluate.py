@@ -14,7 +14,7 @@ from sklearn.metrics import (
     classification_report,
 )
 
-MOOD_LABELS = ["happy", "sad", "angry", "neutral"]
+MOOD_LABELS = ["angry", "happy", "neutral", "sad"]
 os.makedirs("results/reports", exist_ok=True)
 
 

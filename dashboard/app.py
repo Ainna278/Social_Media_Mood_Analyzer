@@ -74,22 +74,9 @@ def load_data():
 
 
 def preprocess_input(text):
-    """Basic cleaning for live input."""
-    import re
-    import nltk
-    from nltk.corpus import stopwords
-    from nltk.tokenize import word_tokenize
-    nltk.download("punkt",     quiet=True)
-    nltk.download("stopwords", quiet=True)
-    nltk.download("punkt_tab", quiet=True)
-
-    text = text.lower()
-    text = re.sub(r"http\S+|www\S+", "", text)
-    text = re.sub(r"[^a-z\s]", "", text)
-    tokens = word_tokenize(text)
-    stop_words = set(stopwords.words("english"))
-    tokens = [t for t in tokens if t not in stop_words and len(t) > 1]
-    return " ".join(tokens)
+    """Full preprocessing pipeline for live input."""
+    from src.preprocess import preprocess
+    return preprocess(text)
 
 
 # ── Header ─────────────────────────────────────────────────────────────────────

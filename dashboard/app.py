@@ -7,13 +7,14 @@ Run with: streamlit run dashboard/app.py
 import sys
 import os
 import re
-import string
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import streamlit as st
 import joblib
 import pandas as pd
+from pipeline_utils import preprocess_text
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -110,16 +111,6 @@ DATA_PATH = "data/processed/mood_data.csv"
 SUMMARY_PATH = "results/reports/evaluation_summary.csv"
 REPORT_PATH = "results/reports/classification_report.txt"
 
-# simple stopword list to avoid NLTK dependency in app
-STOPWORDS = {
-    "the", "is", "am", "are", "a", "an", "and", "to", "of", "in", "it", "this",
-    "that", "for", "on", "with", "as", "was", "were", "be", "been", "being",
-    "i", "im", "ive", "me", "my", "you", "your", "he", "she", "they", "them",
-    "we", "our", "at", "by", "from", "or", "if", "but", "so", "do", "does",
-    "did", "have", "has", "had", "not", "no", "just", "very", "can", "could",
-    "would", "should", "will", "today"
-}
-
 @st.cache_resource
 def load_model():
     model = joblib.load(MODEL_PATH)
@@ -131,14 +122,39 @@ def load_data():
     return pd.read_csv(DATA_PATH)
 
 def preprocess_input(text: str) -> str:
-    text = str(text).lower()
-    text = re.sub(r"http\\S+|www\\S+", "", text)
-    text = re.sub(r"@\\w+", "", text)
-    text = re.sub(r"#", "", text)
-    text = text.translate(str.maketrans("", "", string.punctuation))
-    tokens = text.split()
-    tokens = [t for t in tokens if t not in STOPWORDS and t.isalpha()]
-    return " ".join(tokens)
+    return preprocess_text(text)
+
+def apply_postprocessing_rules(raw_text: str, predicted_mood: str):
+    text = str(raw_text).lower()
+    if predicted_mood == "happy" and re.search(r"\b(not|never|no)\s+(so\s+|very\s+|really\s+)?happy\b", text):
+        return "sad", "Adjusted because the text contains explicit negation such as 'not happy'."
+    if predicted_mood == "happy" and re.search(r"\b(not|never|no)\s+(feeling\s+)?good\b", text):
+        return "sad", "Adjusted because the text contains explicit negation such as 'not good'."
+    if predicted_mood == "happy" and re.search(
+        r"\b(but|though|although|however)\b.*\b(empty|tired|sad|lonely|depressed|terrible|awful|hurt|crying|miserable)\b",
+        text,
+    ):
+        return "sad", "Adjusted because the text has a contrast phrase where the negative feeling appears after 'but'."
+    if predicted_mood in {"neutral", "happy"} and re.search(
+        r"\b(waited|waiting|wasted)\b.*\b(cancelled|canceled|cancel|last minute|late|ignored)\b",
+        text,
+    ):
+        return "angry", "Adjusted because the text describes a common complaint pattern: waiting followed by cancellation or delay."
+    return predicted_mood, None
+
+def adjust_probabilities(proba: dict, raw_mood: str, final_mood: str) -> dict:
+    if raw_mood == final_mood:
+        return proba
+
+    adjusted = proba.copy()
+    raw_score = adjusted.get(raw_mood, 0.0)
+    final_score = adjusted.get(final_mood, 0.0)
+    adjusted[final_mood] = max(raw_score, final_score)
+    adjusted[raw_mood] = min(raw_score, final_score)
+    total = sum(adjusted.values())
+    if total > 0:
+        adjusted = {mood: score / total for mood, score in adjusted.items()}
+    return adjusted
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown('<p class="title">💬 Social Media Mood Analyzer</p>', unsafe_allow_html=True)
@@ -172,7 +188,8 @@ with tab1:
                 st.warning("The text became empty after preprocessing. Try another input.")
             else:
                 vec = vectorizer.transform([cleaned])
-                mood = model.predict(vec)[0]
+                raw_mood = model.predict(vec)[0]
+                mood, rule_note = apply_postprocessing_rules(user_input, raw_mood)
 
                 st.markdown(
                     f'<div class="mood-box {mood}">{MOOD_EMOJI.get(mood, "")} {mood.upper()}</div>',
@@ -182,6 +199,7 @@ with tab1:
                 # show confidence only if supported
                 if hasattr(model, "predict_proba"):
                     proba = dict(zip(model.classes_, model.predict_proba(vec)[0]))
+                    proba = adjust_probabilities(proba, raw_mood, mood)
                     st.markdown("#### Confidence per mood")
                     for m in sorted(proba, key=proba.get, reverse=True):
                         st.progress(float(proba[m]), text=f"{m.capitalize()}: {proba[m]*100:.1f}%")

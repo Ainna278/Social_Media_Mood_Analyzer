@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .DS_Store
+results/bert/model/
+results/bert/model_fair/
+*.safetensors
+optimizer.pt
+scheduler.pt
+rng_state.pth

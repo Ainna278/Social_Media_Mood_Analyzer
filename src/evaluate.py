@@ -14,7 +14,8 @@ from sklearn.metrics import (
     classification_report,
 )
 
-MOOD_LABELS = ["happy", "sad", "angry", "neutral"]
+from pipeline_utils import MOOD_LABELS
+
 os.makedirs("results/reports", exist_ok=True)
 
 
@@ -41,7 +42,9 @@ def evaluate(model, vectorizer, X_test, y_test):
     print()
 
     report = classification_report(
-        y_test, y_pred,
+        y_test,
+        y_pred,
+        labels=MOOD_LABELS,
         target_names=MOOD_LABELS,
         zero_division=0
     )

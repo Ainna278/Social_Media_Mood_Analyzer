@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import torch
 from scipy.special import softmax
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
 
 from pipeline_utils import light_preprocess_text
 
@@ -118,9 +118,12 @@ DATA_PATH = os.path.join(_ROOT, "data", "processed", "mood_data.csv")
 SUMMARY_PATH = os.path.join(_ROOT, "results", "bert", "reports", "evaluation_summary.csv")
 REPORT_PATH = os.path.join(_ROOT, "results", "bert", "reports", "classification_report.txt")
 
+_LOCAL_MODEL_DIR = os.path.join(_ROOT, "results", "bert", "model_fair")
+
 @st.cache_resource(show_spinner="Loading model from HuggingFace Hub…")
 def load_model():
-    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL_ID)
+    config = AutoConfig.from_pretrained(_LOCAL_MODEL_DIR)
+    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL_ID, config=config)
     tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_ID)
     model.eval()
     return model, tokenizer

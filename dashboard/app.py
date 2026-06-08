@@ -12,9 +12,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import streamlit as st
-import joblib
+import numpy as np
 import pandas as pd
-from pipeline_utils import preprocess_text
+import torch
+from scipy.special import softmax
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+from pipeline_utils import light_preprocess_text
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -104,25 +108,28 @@ div.stButton > button {
 """, unsafe_allow_html=True)
 
 MOOD_EMOJI = {"happy": "😊", "sad": "😢", "angry": "😡", "neutral": "😐"}
+MOOD_LABELS = ["happy", "sad", "angry", "neutral"]
+label2id = {label: idx for idx, label in enumerate(MOOD_LABELS)}
+id2label = {idx: label for label, idx in label2id.items()}
 
-MODEL_PATH = "results/model.pkl"
-VECTORIZER_PATH = "results/vectorizer.pkl"
+BERT_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..")
 DATA_PATH = "data/processed/mood_data.csv"
-SUMMARY_PATH = "results/reports/evaluation_summary.csv"
-REPORT_PATH = "results/reports/classification_report.txt"
+SUMMARY_PATH = "results/bert/reports/evaluation_summary.csv"
+REPORT_PATH = "results/bert/reports/classification_report.txt"
 
 @st.cache_resource
 def load_model():
-    model = joblib.load(MODEL_PATH)
-    vectorizer = joblib.load(VECTORIZER_PATH)
-    return model, vectorizer
+    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL_PATH)
+    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_PATH)
+    model.eval()
+    return model, tokenizer
 
 @st.cache_data
 def load_data():
     return pd.read_csv(DATA_PATH)
 
 def preprocess_input(text: str) -> str:
-    return preprocess_text(text)
+    return light_preprocess_text(text)
 
 def apply_postprocessing_rules(raw_text: str, predicted_mood: str):
     text = str(raw_text).lower()
@@ -178,17 +185,31 @@ with tab1:
     if st.button("Analyze Mood", type="primary"):
         if not user_input.strip():
             st.warning("Please enter some text first.")
-        elif not os.path.exists(MODEL_PATH) or not os.path.exists(VECTORIZER_PATH):
-            st.error("Model or vectorizer not found. Please run training first.")
+        elif not os.path.exists(BERT_MODEL_PATH):
+            st.error(f"BERT model not found at {BERT_MODEL_PATH}. Please train BERT first.")
         else:
-            model, vectorizer = load_model()
-            cleaned = preprocess_input(user_input)
+            model, tokenizer = load_model()
+            preprocessed = preprocess_input(user_input)
 
-            if not cleaned.strip():
+            if not preprocessed.strip():
                 st.warning("The text became empty after preprocessing. Try another input.")
             else:
-                vec = vectorizer.transform([cleaned])
-                raw_mood = model.predict(vec)[0]
+                inputs = tokenizer(
+                    preprocessed,
+                    return_tensors="pt",
+                    padding="max_length",
+                    truncation=True,
+                    max_length=128
+                )
+
+                with torch.no_grad():
+                    outputs = model(**inputs)
+                    logits = outputs.logits[0].cpu().numpy()
+
+                proba_scores = softmax(logits)
+                raw_mood_idx = np.argmax(logits)
+                raw_mood = id2label[raw_mood_idx]
+
                 mood, rule_note = apply_postprocessing_rules(user_input, raw_mood)
 
                 st.markdown(
@@ -196,18 +217,14 @@ with tab1:
                     unsafe_allow_html=True
                 )
 
-                # show confidence only if supported
-                if hasattr(model, "predict_proba"):
-                    proba = dict(zip(model.classes_, model.predict_proba(vec)[0]))
-                    proba = adjust_probabilities(proba, raw_mood, mood)
-                    st.markdown("#### Confidence per mood")
-                    for m in sorted(proba, key=proba.get, reverse=True):
-                        st.progress(float(proba[m]), text=f"{m.capitalize()}: {proba[m]*100:.1f}%")
-                else:
-                    st.info("This model does not provide probability scores.")
+                proba_dict = {id2label[i]: float(proba_scores[i]) for i in range(len(MOOD_LABELS))}
+                proba_dict = adjust_probabilities(proba_dict, raw_mood, mood)
+                st.markdown("#### Confidence per mood")
+                for m in sorted(proba_dict, key=proba_dict.get, reverse=True):
+                    st.progress(proba_dict[m], text=f"{m.capitalize()}: {proba_dict[m]*100:.1f}%")
 
                 st.markdown("#### Processed input")
-                st.code(cleaned)
+                st.code(preprocessed)
 
     st.markdown("---")
     st.markdown("**Try an example:**")
@@ -258,9 +275,9 @@ with tab2:
 # ════════════════════════════════════════════════════════════════
 with tab3:
     charts = {
-        "Confusion Matrix (Raw)": "results/charts/confusion_matrix_raw.png",
-        "Confusion Matrix (Normalised)": "results/charts/confusion_matrix_normalised.png",
-        "Per-Class Metrics": "results/charts/per_class_metrics.png",
+        "Confusion Matrix (Raw)": "results/bert/charts/confusion_matrix_raw.png",
+        "Confusion Matrix (Normalised)": "results/bert/charts/confusion_matrix_normalised.png",
+        "Per-Class Metrics": "results/bert/charts/per_class_metrics.png",
     }
 
     available = {k: v for k, v in charts.items() if os.path.exists(v)}

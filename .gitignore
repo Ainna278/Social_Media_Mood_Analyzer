@@ -1,12 +1,16 @@
+.claude/
 .venv/
 venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .DS_Store
-results/bert/model/
-results/bert/model_fair/
+# BERT model weights (too large for git — run src/train_bert.py to regenerate)
 *.safetensors
+pytorch_model.bin
+
+# Training-only checkpoint artifacts
 optimizer.pt
 scheduler.pt
 rng_state.pth
+results/bert/model_fair/checkpoint-*/

@@ -112,15 +112,16 @@ MOOD_LABELS = ["happy", "sad", "angry", "neutral"]
 label2id = {label: idx for idx, label in enumerate(MOOD_LABELS)}
 id2label = {idx: label for label, idx in label2id.items()}
 
-BERT_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..")
-DATA_PATH = "data/processed/mood_data.csv"
-SUMMARY_PATH = "results/bert/reports/evaluation_summary.csv"
-REPORT_PATH = "results/bert/reports/classification_report.txt"
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BERT_MODEL_ID = "touhidulai/Bert-base-Uncased"
+DATA_PATH = os.path.join(_ROOT, "data", "processed", "mood_data.csv")
+SUMMARY_PATH = os.path.join(_ROOT, "results", "bert", "reports", "evaluation_summary.csv")
+REPORT_PATH = os.path.join(_ROOT, "results", "bert", "reports", "classification_report.txt")
 
-@st.cache_resource
+@st.cache_resource(show_spinner="Loading model from HuggingFace Hub…")
 def load_model():
-    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL_PATH)
-    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_PATH)
+    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL_ID)
+    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_ID)
     model.eval()
     return model, tokenizer
 
@@ -185,10 +186,12 @@ with tab1:
     if st.button("Analyze Mood", type="primary"):
         if not user_input.strip():
             st.warning("Please enter some text first.")
-        elif not os.path.exists(BERT_MODEL_PATH):
-            st.error(f"BERT model not found at {BERT_MODEL_PATH}. Please train BERT first.")
         else:
-            model, tokenizer = load_model()
+            try:
+                model, tokenizer = load_model()
+            except Exception as e:
+                st.error(f"Failed to load model `{BERT_MODEL_ID}`: {e}")
+                st.stop()
             preprocessed = preprocess_input(user_input)
 
             if not preprocessed.strip():

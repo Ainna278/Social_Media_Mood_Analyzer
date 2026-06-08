@@ -1,0 +1,36 @@
+# Version control
+.git/
+.gitignore
+
+# Python artifacts
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Large raw data (not needed at runtime)
+archive/data/full_dataset/
+archive/data/train.tsv
+archive/data/dev.tsv
+archive/data/test.tsv
+
+# Notebooks (not needed in container)
+notebooks/
+
+# IDE
+.vscode/
+.idea/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Docker files themselves (no need to copy into image)
+Dockerfile
+docker-compose.yml
+.dockerignore

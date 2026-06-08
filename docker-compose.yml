@@ -1,0 +1,50 @@
+services:
+  dashboard:
+    build: .
+    container_name: mood-analyzer-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persist training outputs so results survive container restarts
+      - ./results:/app/results
+    environment:
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  train-bert:
+    build: .
+    container_name: mood-analyzer-train-bert
+    volumes:
+      - ./results:/app/results
+      - ./data:/app/data
+    environment:
+      - BERT_OUTPUT_DIR=results/bert/model_fair
+      - BERT_EPOCHS=3
+      - BERT_TRAIN_BATCH_SIZE=8
+      - BERT_EVAL_BATCH_SIZE=8
+      - BERT_LR=2e-5
+      - BERT_MAX_SAMPLES=0
+    working_dir: /app
+    command: ["python", "src/train_bert.py"]
+    profiles:
+      - training
+
+  train-baseline:
+    build: .
+    container_name: mood-analyzer-train-baseline
+    volumes:
+      - ./results:/app/results
+      - ./data:/app/data
+    working_dir: /app
+    command: ["python", "src/train_baseline.py"]
+    profiles:
+      - training

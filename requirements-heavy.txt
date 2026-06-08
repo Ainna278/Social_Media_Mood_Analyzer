@@ -1,0 +1,6 @@
+# Heavy packages installed as a separate Docker layer so they are cached
+# independently from the rest of the app.
+# Install via PyTorch CPU index (see Dockerfile).
+torch==2.12.0
+transformers>=4.40.0
+datasets>=2.20.0
